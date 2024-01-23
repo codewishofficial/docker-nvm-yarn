@@ -1,41 +1,36 @@
-# set the base image to Debian
-# https://hub.docker.com/_/debian/
-FROM debian:latest
+# Use an official Node base image
+FROM node:16
 
-# replace shell with bash so we can source files
-RUN rm /bin/sh && ln -s /bin/bash /bin/sh
+# Install dependencies required by nvm and yarn
+RUN apt-get update && \
+    apt-get install -y curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
-RUN curl https://deb.nodesource.com/setup_12.x | bash
-RUN curl https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add -
-RUN echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list
+# Install Yarn
+RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - && \
+    echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list && \
+    apt-get update && \
+    apt-get install -y yarn
 
-# update the repository sources list
-# and install dependencies
-RUN apt-get update \
-    && apt-get install -y curl \
-    && apt-get -y autoclean
-
-# nvm environment variables
+# Install nvm
 ENV NVM_DIR /usr/local/nvm
-ENV NODE_VERSION 14
+RUN mkdir -p $NVM_DIR
+RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | NVM_DIR=$NVM_DIR bash
 
-# install nvm
-# https://github.com/creationix/nvm#install-script
-RUN curl --silent -o- https://raw.githubusercontent.com/creationix/nvm/v0.31.2/install.sh | bash
-
-# install node and npm
-RUN source $NVM_DIR/nvm.sh \
-    && nvm install $NODE_VERSION \
-    && nvm alias default $NODE_VERSION \
-    && nvm use default
-
-# add node and npm to path so the commands are available
-ENV NODE_PATH $NVM_DIR/v$NODE_VERSION/lib/node_modules
+# Add nvm to PATH
 ENV PATH $NVM_DIR/versions/node/v$NODE_VERSION/bin:$PATH
 
-RUN apt-get install -y yarn
+# Use a separate RUN command to install Node using nvm
+RUN . $NVM_DIR/nvm.sh && nvm install $NODE_VERSION && nvm use $NODE_VERSION
 
-# confirm installation
-RUN node -v
-RUN npm -v
-RUN yarn -v
+# Set working directory
+WORKDIR /app
+
+# Confirm installation
+RUN . $NVM_DIR/nvm.sh && nvm use $NODE_VERSION && node -v && npm -v && yarn -v
+
+# Add a health check for sanity check
+HEALTHCHECK --interval=30s CMD node -v || exit 1
+
+# Set the entrypoint to NVM's node
+ENTRYPOINT ["/bin/bash", "-c"]
